@@ -58,13 +58,13 @@ async function resolveTrain(t, stations) {
   });
   const leg = polaczenia.flatMap(p => p.pociagi).find(p => p.nrPociagu === t.train);
   if (!leg) throw new Error(`Train ${t.train} not found ${t.from} -> ${t.to} on ${t.date}`);
-  const { available } = await get(`/grm/grm/available/${t.train}/${t.date.replace(/-/g, '')}`);
-  if (!available) throw new Error(`Train ${t.train} has no seat map, can't watch it`);
   return {
     label: `${leg.kategoriaPociagu} ${leg.nrPociagu} ${leg.nazwaPociagu ?? ''} ${t.from} ${leg.dataWyjazdu.slice(0, 16)} -> ${t.to} ${leg.dataPrzyjazdu.slice(11, 16)}`.replace(/\s+/g, ' '),
     cat: leg.kategoriaPociagu, nr: leg.nrPociagu,
     dep: stamp(leg.dataWyjazdu), arr: stamp(leg.dataPrzyjazdu),
     fromEPA: from.kodEPA, toEPA: to.kodEPA,
+    availablePath: `/grm/grm/available/${t.train}/${t.date.replace(/-/g, '')}`,
+    hasSeatMap: false,
     hadFree: false,
   };
 }
@@ -101,8 +101,14 @@ async function main() {
 
   let backoff = 0;
   while (true) {
-    try {
-      for (const t of trains) {
+    let failed = 0;
+    for (const t of trains) {
+      try {
+        t.hasSeatMap ||= (await get(t.availablePath)).available;
+        if (!t.hasSeatMap) {
+          log(t.label, '| no seat map published yet');
+          continue;
+        }
         const free = await freeSeats(t);
         const total = Object.values(free).flat().length;
         log(t.label, '| free 2nd class:', total, total ? JSON.stringify(free) : '');
@@ -117,14 +123,13 @@ async function main() {
           log('email sent');
         }
         t.hadFree = total > 0;
+      } catch (e) {
+        failed++;
+        log(t.label, '| error:', e.message);
       }
-      backoff = 0;
-      await sleep(config.intervalSec * 1000);
-    } catch (e) {
-      backoff = Math.min(Math.max(backoff * 2, config.intervalSec * 1000), 300000);
-      log('error:', e.message, `- retry in ${backoff / 1000}s`);
-      await sleep(backoff);
     }
+    backoff = failed === trains.length ? Math.min(Math.max(backoff * 2, config.intervalSec * 1000), 300000) : 0;
+    await sleep(backoff || config.intervalSec * 1000);
   }
 }
 
