@@ -9,7 +9,15 @@ const HEADERS = {
   Origin: 'https://ebilet.intercity.pl',
   Referer: 'https://ebilet.intercity.pl/',
   Accept: 'application/json, text/plain, */*',
+  'Accept-Language': 'pl-PL,pl;q=0.9,en;q=0.8',
   'Content-Type': 'application/json',
+  'App-Version': '1.6.13',
+  'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"Windows"',
+  'Sec-Fetch-Dest': 'empty',
+  'Sec-Fetch-Mode': 'cors',
+  'Sec-Fetch-Site': 'same-site',
 };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
