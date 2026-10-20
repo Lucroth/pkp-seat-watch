@@ -1,0 +1,12 @@
+{
+  "name": "pkp-seat-watch",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node watch.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.16"
+  }
+}

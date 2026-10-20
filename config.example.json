@@ -1,0 +1,6 @@
+{
+  "intervalSec": 10,
+  "trains": [
+    { "date": "2026-10-23", "from": "Warszawa Centr.", "to": "Kraków Gł.", "train": 1312 }
+  ]
+}
