@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
+import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import nodemailer from 'nodemailer';
 
@@ -64,8 +65,8 @@ async function resolveTrain(t, stations) {
     dep: stamp(leg.dataWyjazdu), arr: stamp(leg.dataPrzyjazdu),
     fromEPA: from.kodEPA, toEPA: to.kodEPA,
     availablePath: `/grm/grm/available/${t.train}/${t.date.replace(/-/g, '')}`,
+    key: `${t.date}/${t.train}`,
     hasSeatMap: false,
-    hadFree: false,
   };
 }
 
@@ -92,15 +93,25 @@ async function main() {
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
   });
 
+  const { values: args } = parseArgs({ options: { minutes: { type: 'string' } } });
+  const until = args.minutes ? Date.now() + Number(args.minutes) * 60000 : Infinity;
+  const statePath = process.env.STATE_FILE;
+  const state = statePath ? JSON.parse(await readFile(statePath, 'utf8').catch(() => '{}')) : {};
+
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = config.trains.filter(t => t.date >= today);
+  if (!upcoming.length) return log('all trains in config have left, nothing to watch');
+
   const { stacje } = await post('Aktualizacja', { metoda: 'pobierzStacje', ostatniaAktualizacjaData: '2020-01-01 00:00:00.000' });
   const trains = [];
-  for (const t of config.trains) {
-    trains.push(await resolveTrain(t, stacje));
+  for (const t of upcoming) {
+    const train = await resolveTrain(t, stacje);
+    trains.push({ ...train, hadFree: state[train.key] ?? false });
     log('watching', trains.at(-1).label);
   }
 
   let backoff = 0;
-  while (true) {
+  while (Date.now() < until) {
     let failed = 0;
     for (const t of trains) {
       try {
@@ -121,6 +132,10 @@ async function main() {
             text: `${t.label}\n\n${list}\n\nhttps://ebilet.intercity.pl/`,
           });
           log('email sent');
+        }
+        if (t.hadFree !== total > 0 && statePath) {
+          state[t.key] = total > 0;
+          await writeFile(statePath, JSON.stringify(state));
         }
         t.hadFree = total > 0;
       } catch (e) {

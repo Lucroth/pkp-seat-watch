@@ -1,0 +1,51 @@
+name: Watch seats
+
+# Every 20 min a run checks the trains in config.json for 25 min, queued behind the last one.
+# state.json (which trains already had free seats) is carried between runs in the Actions cache,
+# so an email goes out only when a train goes from no free 2nd class seats to some.
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "How long this run checks for"
+        default: "25"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache/restore@v4
+        with:
+          path: state.json
+          key: state-${{ github.run_id }}
+          restore-keys: state-
+      - name: Watch
+        env:
+          SMTP_HOST: smtp.gmail.com
+          SMTP_PORT: "465"
+          SMTP_USER: ${{ secrets.GMAIL_USER }}
+          SMTP_PASS: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          STATE_FILE: state.json
+        run: node watch.mjs --minutes ${{ inputs.minutes || '25' }}
+      - uses: actions/cache/save@v4
+        if: always() && hashFiles('state.json') != ''
+        with:
+          path: state.json
+          key: state-${{ github.run_id }}
